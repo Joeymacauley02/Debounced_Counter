@@ -1,0 +1,110 @@
+-- 
+-- author:   Joey Macauley and Ian Flury
+-- file:     taillight.vhdl
+-- comments: Implementation of the FSM to dictate the behavior of each signal when the corresponding SW is high. 
+--
+
+library ieee;
+use ieee.std_logic_1164.all;
+use IEEE.numeric_std.ALL;
+
+entity taillight is
+port ( CLK					: in std_logic; 
+	    HZRD, LFT, RGHT  : in std_logic; 
+		 RST					: in std_logic; 
+		 LIGHTS				: out std_logic_vector(5 downto 0)); 
+end taillight;
+
+architecture rtl of taillight is
+signal op : std_logic_vector(2 downto 0); 
+signal reset : std_logic; 
+begin	
+
+-- Read SW value
+trigger_p : process(reset, HZRD, LFT, RGHT)
+begin
+	if (reset = '1') then
+		op <= "000"; 
+	-- Hazard : Priority 0
+	elsif (HZRD = '1') then
+		op <= "001";  
+	-- Left : Priority 1
+	elsif (LFT = '1' and HZRD = '0') then
+		op <= "100"; 
+	-- Right: Priority 2
+	elsif (RGHT = '1' and HZRD = '0') then
+		op <= "010"; 
+	-- ALL OFF
+	else
+		op <= "000";
+	end if;  
+end process trigger_p; 
+
+-- FSM for taillight behavior
+hazard_p : process(CLK, op)
+variable light_state : std_logic := '0'; 
+variable level : integer := 0;
+begin
+	if (op = "000") then
+		LIGHTS <= "000000";
+		light_state := '0';
+		level := 3; 
+	elsif rising_edge(CLK) then
+		-- hazards
+		if (op = "001") then
+			if (light_state = '0') then
+				LIGHTS <= "111111";  
+				light_state := '1';
+			else
+				LIGHTS <= "000000";
+				light_state := '0'; 
+			end if; 
+		-- left
+		elsif (op = "100") then
+			if (level = 0) then
+				level := level + 1; 
+				LIGHTS <= "001000";
+			elsif (level = 1) then
+				level := level + 1;
+				LIGHTS <= "011000";
+			elsif (level = 2) then
+				level := level + 1;
+				LIGHTS <= "111000";
+			elsif (level = 3) then
+				level := 0;
+				LIGHTS <= "000000";
+			else
+			end if;
+		-- right
+		elsif (op = "010") then
+			if (level = 0) then
+				level := level + 1; 
+				LIGHTS <= "000100";
+			elsif (level = 1) then
+				level := level + 1;
+				LIGHTS <= "000110";
+			elsif (level = 2) then
+				level := level + 1;
+				LIGHTS <= "000111";
+			elsif (level = 3) then
+				level := 0;
+				LIGHTS <= "000000";
+			else
+			end if; 
+		else
+		end if; 
+	else
+	end if; 
+end process hazard_p; 
+
+-- System Reset
+reset_p : process(RST)
+begin
+	if (RST = '0') then
+		reset <= '1'; 
+	else
+		reset <= '0'; 
+	end if; 
+end process reset_p; 
+
+end rtl;
